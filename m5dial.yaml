@@ -2,7 +2,7 @@ esphome:
   name: m5dial
   friendly_name: m5dial
   includes:
-    <<: !include: hfiles/m5ntn.h
+    <<: !include: hfiles/m5btn.h
   on_boot: 
     priority: 600
     then:
