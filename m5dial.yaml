@@ -1,8 +1,8 @@
 esphome:
   name: m5dial
   friendly_name: m5dial
-  includes:
-    <<: !include: hfiles/m5btn.h
+ # includes:
+ #   <<: !include: hfiles/m5btn.h
   on_boot: 
     priority: 600
     then:
