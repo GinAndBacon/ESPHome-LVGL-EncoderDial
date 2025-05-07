@@ -43,8 +43,8 @@ wifi:
 
 # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
-    ssid: "M5Dial Fallback Hotspot"
-    password: "cRUD9R5GJldd"
+    ssid: "M5Dial Hotspot"
+    password: HSPW"
 
 captive_portal:
 
