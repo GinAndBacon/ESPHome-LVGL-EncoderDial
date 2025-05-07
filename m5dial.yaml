@@ -1,11 +1,12 @@
 esphome:
   name: m5dial
   friendly_name: m5dial
- # includes:
- #   <<: !include: hfiles/m5btn.h
+##  includes:
+#  includes: m5btn.h
   on_boot: 
     priority: 600
     then:
+      - pcf8563.read_time:
       - light.turn_on: backlight
 
 esp32:
@@ -13,13 +14,18 @@ esp32:
   framework:
     type: arduino
 
+#wxternal_components:
+# - source: github://clydebarrow/esphome@lvgl
+ #  refresh: 10min
+#   components: [ lvgl ]
+
+# Enable logging
 logger:
   level: DEBUG
 
 api:
   encryption:
-    key: "API"  
-  on_client_connected:
+    key: "APIKEY"
     - if:
         condition:
           lambda: 'return (0 == client_info.find("Home Assistant "));'
@@ -29,7 +35,7 @@ api:
 
 ota:
   - platform: esphome
-    password: "OTA"
+    password: "oTA
 
 wifi:
   ssid: !secret wifi_ssid
@@ -38,15 +44,17 @@ wifi:
 # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: "M5Dial Fallback Hotspot"
-    password: "HS"
+    password: "ha"
 
 captive_portal:
 
 substitutions:
   # Add the ids of the devices you want to control here
   light_control: light.all_lights
-  media_player_control: media_player.kodi_coreelec
-
+  tv_control: light.wled_strip
+  media_player_control:   media_player.coreelec
+  media_2_control: media_player.television
+  
 <<: !include common/colors.yaml
 <<: !include common/images.yaml
 
@@ -55,6 +63,69 @@ i2c:
     sda: GPIO11
     scl: GPIO12
     scan: False
+
+time:
+  # RTC
+  - platform: pcf8563
+    id: rtctime
+    address: 0x51
+    update_interval: never
+  - platform: homeassistant
+    id: esptime
+    on_time_sync:
+      then:
+        - pcf8563.write_time
+
+binary_sensor:
+  - platform: gpio
+    pin: GPIO42
+    id: backlightbutton
+
+  - platform: gpio 
+    pin: GPIO46
+    id: holdbtn
+
+  - platform: homeassistant
+    id: remote_light
+    entity_id: light.all_lights
+    publish_initial_state: true
+    on_state:
+      then:
+        lvgl.widget.update:
+          id: light_button
+          state:
+            checked: !lambda return x;
+  - platform: homeassistant
+    id: remote_tv
+    entity_id: light.wled_strip
+    publish_initial_state: true
+    on_state:
+      then:
+        lvgl.widget.update:
+          id: tv_button
+          state:
+            checked: !lambda return x;            
+  - platform: homeassistant
+    id: ac_i
+    entity_id: switch.air_conditioner
+    publish_initial_state: true
+    on_state:
+      then:
+        lvgl.widget.update:
+          id: ac_id
+          state:
+            checked: !lambda return x;
+  - platform: homeassistant
+    id: tv_r
+    entity_id: media_player.television
+    publish_initial_state: true
+    on_state:
+      then:
+        lvgl.widget.update:
+          id: tv_id
+          state:
+            checked: !lambda return x;
+
 
 touchscreen:
   platform: ft5x06
@@ -93,41 +164,6 @@ display:
     dimensions: 
       height: 240
       width: 240
-
-binary_sensor:
-  - platform: gpio
-    pin: GPIO42
-    id: backlightbutton
-  - platform: homeassistant
-    id: remote_light
-    entity_id: light.all_lights
-    publish_initial_state: true
-    on_state:
-      then:
-        lvgl.widget.update:
-          id: light_button
-          state:
-            checked: !lambda return x;
-  - platform: homeassistant
-    id: ac_i
-    entity_id: switch.air_conditioner
-    publish_initial_state: true
-    on_state:
-      then:
-        lvgl.widget.update:
-          id: ac_id
-          state:
-            checked: !lambda return x;
-  - platform: homeassistant
-    id: tv_r
-    entity_id: remote.television
-    publish_initial_state: true
-    on_state:
-      then:
-        lvgl.widget.update:
-          id: tv_id
-          state:
-            checked: !lambda return x;
 
 
 number:
@@ -196,9 +232,61 @@ sensor:
             format: "%d%%"
             args: [ 'map(x,0,255,0,100)' ]
   - platform: homeassistant
+    id: tv_volume
+    entity_id: $tv_control
+    attribute: brightness
+    on_value: 
+      then:
+      - lvgl.arc.update:
+          id: arc_id2
+          value: !lambda return x;
+      - lvgl.label.update:
+          id: volume_label
+          text:
+            format: "%d%%"
+            args: [ 'map(x,0,255,0,100)' ]            
+  - platform: homeassistant
+    id: media_player_state
+    entity_id: $media_player_control
+    attribute: volume_level
+  - platform: homeassistant
     id: light_state
     entity_id: $light_control
     attribute: brightness
+  - platform: homeassistant
+    id: tv_state
+    entity_id: $tv_control
+    attribute: brightness    
+  - platform: homeassistant
+    id: media_2_state
+    entity_id: $media_2_control
+    attribute: volume_level        
+#  - platform: homeassistant
+#    id: climate_device_setpoint
+#    entity_id: $climate_control
+#    attribute: volume_level
+#    on_value:
+#      - lvgl.spinbox.update:
+#          id: spinbox_id
+#          value: !lambda return x;
+
+#text_sensor:
+#  - platform: homeassistant
+#    id: climate_device
+#    entity_id: $climate_control
+#    filters:
+#      - map:
+#        - heat_cool -> Auto
+#        - heat -> Heat
+#        - cool -> Cool
+#        - dry -> Dry
+#        - fan -> Fan
+#        - off -> Off
+#    on_value: 
+#      then:
+#        lvgl.label.update:
+#          id: current_temp_label
+#          text: !lambda return x.c_str();
 
 light:
   - platform: monochromatic
@@ -214,78 +302,85 @@ output:
     max_power: 1
     min_power: 0.1
 
+  - platform: ledc
+    pin: GPIO3
+    id: buzzer
+
+rtttl:
+  output: buzzer
+
 image:
   - file: https://esphome.io/_static/favicon-512x512.png
     id: boot_logo
     resize: 100x100
     type: RGB565
-    use_transparency: true
+   # transparency: true
 
   - file: youtube.png
     id: yt
     resize: 40x40
     type: RGB565
-    use_transparency: true
+    #transparency: true
 
   - file: yoda_transparent1.png
     id: yoda
     resize: 60x60
     type: RGB565
-    use_transparency: true
+    #transparency: true
 
   - file: icons8-rgb-lamp-96.png
     id: rgb_ic
     resize: 40x40
     type: RGB565
-    use_transparency: true
+  #  transparency: true
     
   - file: icons8-volume-up-64.png
     id: vol_up
     resize: 40x40
     type: RGB565
-    use_transparency: true
-    
+ #   transparency: true
+   
   - file: icons8-volume-down-64.png
     id: vol_down
     resize: 40x40
     type: RGB565
-    use_transparency: true   
-    
+    #transparency: true   
+   
   - file: icons8-play-100.png
     id: ply
     resize: 40x40
     type: RGB565
-    use_transparency: false   
+   # transparency: false   
     
   - file: mirrored-reflector-bulb.png
     id: yb
     resize: 40x40
     type: RGB565
-    use_transparency: true   
+    #transparency: true   
        
   - file: air-conditioner.png
     id: ac
     resize: 40x40
     type: RGB565
-    use_transparency: true    
+   # transparency: true    
 
   - file: BlueBulb.png
     id: blue_bulb
     resize: 40x40
     type: RGB565
-    use_transparency: true        
+   # transparency: true        
   
   - file: icons8-tv-60.png
     id: tv
     resize: 40X40  
     type: RGB565
-    use_transparency: true    
+  #  transparency: true    
     
   - file: icons8-back-100.png
     id: back
     resize: 40X40  
     type: RGB565
-    use_transparency: true    
+    #transparency: true    
     
 lvgl:
   on_idle:
@@ -350,6 +445,11 @@ lvgl:
     - my_lcd
   touchscreens:
     - my_touchscreen
+ # backlightbutton:
+  #  - homeassistant.service:
+  #       service: script.turn_on
+      #   data:
+   #          entity_id: script.stereo_volume_down
   pages:
     - id: coverpage
       bg_color: 0x000000
@@ -364,7 +464,7 @@ lvgl:
             widgets:
               - image:
                   align: CENTER
-                  src: vol_up
+                  src: vol_down
             on_press:
               - homeassistant.service:
                   service: script.turn_on
@@ -386,6 +486,7 @@ lvgl:
                   service: script.turn_on
                   data:
                     entity_id: script.stereo_volume_up     
+                    
         - button:
             x: 0
             width: 40
@@ -468,7 +569,7 @@ lvgl:
               - homeassistant.service:
                   service: script.turn_on
                   data:
-                    entity_id: script.sony_tube
+                    entity_id: script.smarttube
                     
         - button: 
             id: ac_id
@@ -504,9 +605,164 @@ lvgl:
                   src: tv
             on_press:
               - homeassistant.service:
-                  service: remote.toggle
+                  action: media_player.toggle
                   data:
-                    entity_id: remote.television                              
+                    entity_id: media_player.television                                    
+
+    - id: media_page
+      bg_color: 0x000000
+      widgets:                                        
+        - button:
+            x: -80
+            width: 40
+            height: 40
+            radius: 3000
+            id: media_id
+            align: CENTER
+            widgets:
+              - image:
+                  align: CENTER
+                  src: vol_up
+            on_press:
+              - homeassistant.service:
+                  service: media_player.volume_down
+                  data:
+                    entity_id: media_player.sony_soundbar
+   
+        - button:
+            x: 80
+            width: 40
+            height: 40
+            radius: 3000
+            align: CENTER
+            widgets:
+              - image:
+                  align: CENTER
+                  src: vol_up
+            on_press:
+              - homeassistant.service:
+                  service: media_player.volume_up
+                  data:
+                    entity_id: media_player.sony_soundbar
+        - button:
+            x: 0
+            width: 40
+            height: 40
+            radius: 3000
+            align: CENTER
+            widgets:
+              - image:
+                  align: CENTER
+                  src: ply
+            on_press:
+              - homeassistant.service:
+                  service: script.turn_on
+                  data:
+                    entity_id: script.sony_home               
+   
+        - button:
+            y: 80
+            width: 40
+            height: 40
+            radius: 3000
+            align: CENTER
+            widgets:
+              - image:
+                  align: CENTER
+                  src: yb
+            on_press:
+              - homeassistant.service:
+                  service: automation.turn_on
+                  data:
+                    entity_id: automation.close_sony_apps
+   
+        - button: 
+            y: -80
+            width: 40
+            height: 40
+            radius: 3000
+            align: CENTER
+            widgets:
+              - image:
+                  align: CENTER
+                  src: yoda
+          #        y: -80
+          #        radius: 2400
+            on_press:
+              - homeassistant.service:
+                  service: scene.turn_on
+                  data:
+                    entity_id: scene.all_lights_1_its_blue
+   
+        - button: 
+            y: -60
+            x: -60
+            width: 40
+            height: 40
+            radius: 3000
+            align: CENTER
+            widgets:
+              - image:
+                  align: CENTER
+                  src: back
+            on_press:
+              - homeassistant.service:
+                  service: light.toggle
+                  data:
+                    entity_id: light.wled_strip
+
+        - button: 
+            y: 60
+            x: -60
+            width: 40
+            height: 40
+            radius: 3000
+            align: CENTER
+            widgets:
+              - image:
+                  align: CENTER
+                  src: yt
+            on_press:
+              - homeassistant.service:
+                  service: script.turn_on
+                  data:
+                    entity_id: script.sony_input_4
+                    
+        - button: 
+            y: 60
+            x: 60
+            width: 50
+            height: 50
+            radius: 3000
+            align: CENTER
+            checkable: true
+            widgets:
+              - image:
+                  align: CENTER
+                  src: ac
+            on_press:
+              - homeassistant.service:
+                  service: media_player.volume_mute
+                  data:
+                    entity_id: media_player.television    
+   
+        - button: 
+            y: -60
+            x: 60
+            width: 50
+            height: 50
+            radius: 3000
+            align: CENTER
+            checkable: true
+            widgets:
+              - image:
+                  align: CENTER
+                  src: tv
+            on_press:
+              - homeassistant.service:
+                  service: scene.turn_on
+                  data:
+                    entity_id: scene.blue_tv_time_duplex_backup                                                 
 
     - id: lightpage
       bg_color: 0x000000
@@ -549,3 +805,28 @@ lvgl:
                     service: light.toggle
                     data:
                       entity_id: $light_control
+                      
+    - id: tvpage
+      bg_color: 0x000000
+      widgets:
+        - label:
+            id: volume_label
+            align: CENTER
+            text: ""
+        - arc:
+            width: 200
+            height: 200
+            align: CENTER
+            group: control_group
+            arc_width: 16
+            id: arc_id2
+            value: 0
+            min_value: 0
+            max_value: 255
+            adjustable: true
+            on_release:            
+                - homeassistant.service:
+                    service: light.turn_on
+                    data:
+                      entity_id: $tv_control
+                      brightness: !lambda return
