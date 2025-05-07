@@ -25,7 +25,8 @@ logger:
 
 api:
   encryption:
-    key: "APIKEY"
+    key: "APIKEY"  
+  on_client_connected:
     - if:
         condition:
           lambda: 'return (0 == client_info.find("Home Assistant "));'
@@ -35,7 +36,7 @@ api:
 
 ota:
   - platform: esphome
-    password: "oTA
+    password: "OTAPW"
 
 wifi:
   ssid: !secret wifi_ssid
@@ -43,8 +44,8 @@ wifi:
 
 # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
-    ssid: "M5Dial Hotspot"
-    password: HSPW"
+    ssid: "M5Dial Fallback Hotspot"
+    password: "HSPW"
 
 captive_portal:
 
